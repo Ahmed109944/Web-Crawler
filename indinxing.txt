@@ -1,0 +1,434 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.IO;
+
+//package to use web request and response
+using System.Net;
+//package to use html parser like (mshtml)
+using mshtml;
+//package to make connection with sql server
+using System.Data.SqlClient;
+using NTextCat;
+using Porter2Stemmer;
+using System.Data;
+using System.Text.RegularExpressions;
+using HtmlAgilityPack;
+
+namespace IR_Milestone1
+{
+    class Program
+    {
+        public static HttpWebRequest webRequest;
+        public static HttpWebResponse WebResponse;
+        public static string content;
+        public static string URL;
+        public static int ID = 0;
+        public static mshtml.IHTMLDocument2 my_doc;
+        public static Queue<string> ToVisit;
+        public static Queue<string> Visited;
+        public static List<string> duplicate;
+        public static SqlCommand command;
+        public static SqlConnection conn;
+        public static int x = 0;
+        
+        public static void store_details_table(string URL, string page)
+        {
+            //text = page.DocumentNode.SelectSingleNode("//body").InnerText.Replace(" ", "");
+
+            string query = "insert into details (term,doc_id) values(@URL,@Page)";
+            conn.Open();
+            command = new SqlCommand(query, conn);
+            command.Parameters.Add("@URL", URL);
+            command.Parameters.Add("@Page", page);
+            command.ExecuteNonQuery();
+            // Console.WriteLine(URL);
+            conn.Close();
+
+
+        }
+        public static void store_more_details_table(string term, string doc_id, string freq, string positions)
+        {
+            //text = page.DocumentNode.SelectSingleNode("//body").InnerText.Replace(" ", "");
+
+            string query = "insert into more_details (term,doc_id,counter,positions) values(@term,@doc_id,@freq,@positions)";
+            conn.Open();
+            command = new SqlCommand(query, conn);
+            command.Parameters.Add("@term", term);
+            command.Parameters.Add("@doc_id", doc_id);
+            command.Parameters.Add("@freq", freq);
+            command.Parameters.Add("@positions", positions);
+            command.ExecuteNonQuery();
+            // Console.WriteLine(URL);
+            conn.Close();
+
+
+        }
+        static void Main(string[] args)
+        {
+            conn = new SqlConnection();
+            conn.ConnectionString = @"Data Source=DESKTOP-C0GR1RQ\MSSQLSERVER01;Initial Catalog=WebCrawler;Integrated Security=True";
+
+            List<String> words_list = new List<string>();
+            List<String> stopwords = new List<string>(new string[] { "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now" });
+            int counter = 1;
+            List<List<String>> listof_tokens = new List<List<String>>();
+            List<String> dublication_prvent_list = new List<String>();
+
+            Dictionary<String, String> more_details_dectionary = new Dictionary<String, String>();
+
+            using (SqlConnection myConnection = new SqlConnection(conn.ConnectionString))
+            {
+
+                string oString = "Select Page_Content from Phase2 ";
+                int j = 1;
+                SqlCommand oCmd = new SqlCommand(oString, myConnection);
+                myConnection.Open();
+                int i = 0;
+                //reading page content row by row in thw while loop
+                using (SqlDataReader oReader = oCmd.ExecuteReader())
+                {
+                    while (oReader.Read() && counter <= 1698)
+                    {
+
+                        String rString = oReader["Page_Content"].ToString();
+
+
+                        //Tokenizer
+                        //convert any , to space
+                        rString = rString.Replace(",", " ");
+                        StringBuilder stringBuilder = new StringBuilder();
+                        //deleting dublicated spaces
+                        for (int g = 0; g < rString.Length; g++)
+                        {
+                            if (g < rString.Length - 1)
+                            {
+                                if (rString[g] == ' ' && rString[g + 1] != ' ' && rString[g + 1] != '-')
+                                {
+                                    stringBuilder.Append(" ");
+                                }
+                                else if (rString[g] != ' ')
+                                {
+                                    stringBuilder.Append(rString[g]);
+                                }
+                                else
+                                {
+                                    stringBuilder.Append("");
+                                }
+
+                            }
+
+
+                        }
+                       
+                        rString = stringBuilder.ToString();
+
+                        rString = rString.ToLower();
+                        //spliting the page by space and apply stemmer func on it then store it in the details table
+                        String[] words_arr = rString.Split(' ');
+                        //////////////////End Tokenizer/////////////////
+                        for (int la = 0; la < words_arr.Length; la++)
+                        {
+                            string word = words_arr[la];
+                            var stemmerObject = new EnglishPorter2Stemmer(); //برجع الكلمه لاصلها
+                            var stemmed = stemmerObject.Stem(word).Value;
+                            words_arr[la] = stemmed.ToString();
+                            store_details_table(words_arr[la], counter.ToString());
+
+                        }
+
+                        /////////////////////////////////////////////////////////////
+
+                        for (int k = 0; k < words_arr.Length; k++)
+                        {
+                            words_list.Add(words_arr[k]);//بناخد كوبي وفيها مشكله ال stop word والكلمات المتكرره
+                        }
+                        //remove stooping words 
+                        for (int l = 0; l < stopwords.Count; l++)
+                        {
+                            words_list.RemoveAll(a => a == (stopwords[l]));//حلينا المشكله
+                        }
+
+                        //remove dublicated words
+                        for (int u = 0; u < words_list.Count; u++)
+                        {
+                            if (!dublication_prvent_list.Contains(words_list[u]))
+                                dublication_prvent_list.Add(words_list[u]);
+                        }
+                        listof_tokens.Add(dublication_prvent_list);
+                        //filling the dectionary by words
+                        for (int p = 0; p < dublication_prvent_list.Count; p++)
+                        {
+                            if (!more_details_dectionary.ContainsKey(dublication_prvent_list[p]))
+                            {
+                                String positions = "";// مكانها ف التوكين القديمه 
+                                int frequancy = 0;//متكرره كام مره
+
+
+                                for (int g = 0; g < words_arr.Length; g++)
+                                {
+                                    if (dublication_prvent_list[p] == words_arr[g])
+                                    {
+                                        int x = g + 1;
+                                        positions += x.ToString();
+                                        frequancy++;
+                                        positions += ":";// علشان نفرق بين كل  بوزيشن والتاني 
+                                    }
+
+
+
+                                }
+                                //بنمسح اخر : موجوده لانها زياده
+                                positions = positions.Remove(positions.Length - 1);
+                                String details = "";
+                                details += counter.ToString();
+                                details += "|";
+                                details += frequancy.ToString();
+                                details += "|";
+                                details += positions.ToString();
+                                more_details_dectionary.Add(dublication_prvent_list[p], details);
+                            }
+                            else if (more_details_dectionary.ContainsKey(dublication_prvent_list[p]))
+                            {
+                                String details = "";
+                                String[] details_arr = new String[3];
+                                details_arr = more_details_dectionary[dublication_prvent_list[p]].Split('|');
+
+                                String opop = "," + counter.ToString();
+                                details_arr[0] += opop;
+
+
+
+                                String positions = ",";
+                                int frequancy = int.Parse(details_arr[1]);
+
+
+                                for (int g = 0; g < words_arr.Length; g++)
+                                {
+                                    if (dublication_prvent_list[p] == words_arr[g])
+                                    {
+                                        int x = g + 1;
+                                        positions += x.ToString();
+                                        frequancy++;
+                                        positions += ":";
+                                    }
+
+
+
+                                }
+                                positions = positions.Remove(positions.Length - 1);
+                                details_arr[1] = frequancy.ToString();
+                                details_arr[2] += positions;
+                                details = details_arr[0] + "|" + details_arr[1] + "|" + details_arr[2];
+                                more_details_dectionary[dublication_prvent_list[p]] = details;
+                            }
+                        }
+
+                        words_list = new List<string>();
+                        dublication_prvent_list = new List<String>();
+
+                        Console.WriteLine(counter);
+                        counter++;
+
+
+                    }
+
+                }
+
+            }
+
+            int lengh = more_details_dectionary.Count;
+            Console.WriteLine("Length is " + lengh);
+            int ll = 1;
+            foreach (KeyValuePair<String, String> entry in more_details_dectionary)// ال بيرجع عباره عن  K and Value 
+            {
+                String myString = entry.Value;
+                String[] detailsarr = new String[3];
+                detailsarr = myString.Split('|');
+                Console.WriteLine(ll);
+                ll++;
+                store_more_details_table(entry.Key.ToString(), detailsarr[0], detailsarr[1], detailsarr[2]);
+
+            }
+            Console.ReadKey();
+            Console.ReadKey();
+
+        }
+        public static void store_new_database(string URL, string page)
+        {
+            string query = "insert into Phase2 (URL,Page_Content) values(@URL,@Page)";
+            conn.Open();
+            command = new SqlCommand(query, conn);
+            command.Parameters.Add("@URL", URL);
+            command.Parameters.Add("@Page", page);
+            command.ExecuteNonQuery();
+            conn.Close();
+        }
+        public void convert()
+        {
+
+
+            conn = new SqlConnection();
+            conn.ConnectionString = @"Data Source=DESKTOP-C0GR1RQ\MSSQLSERVER01;Initial Catalog=WebCrawler;Integrated Security=True";
+
+
+            //string word = "playing";
+            //var stemmerObject = new EnglishPorter2Stemmer();
+            //var stemmed = stemmerObject.Stem(word).Value;
+            //Console.WriteLine(stemmed);
+            //Console.ReadKey();
+
+
+            String query = "select URL from urlpages";
+            SqlDataAdapter DA = new SqlDataAdapter(query, conn);
+            DataTable tbl;
+            tbl = new DataTable();
+            DA.Fill(tbl);
+
+
+            //for (int i = 0; i < tbl.Rows.Count; i++)
+            //{
+            //    str = tbl.Rows[i][0].ToString();
+            //    list.Add(str);
+            //}
+
+
+
+            //WebResponse myWebResponse = myWebRequest.GetResponse();
+            //Stream streamResponse = myWebResponse.GetResponseStream();
+            //StreamReader sReader = new StreamReader(streamResponse);
+            //string rString = sReader.ReadToEnd();
+            //streamResponse.Close();
+            //sReader.Close();
+            //myWebResponse.Close();
+
+
+
+            using (SqlConnection myConnection = new SqlConnection(conn.ConnectionString))
+            {
+
+                string oString = "Select content from urlpages ";
+                int j = 1;
+                SqlCommand oCmd = new SqlCommand(oString, myConnection);
+                myConnection.Open();
+                int i = 0;
+                using (SqlDataReader oReader = oCmd.ExecuteReader())
+                {
+                    while (oReader.Read())
+                    {
+                        //
+                        String rString = oReader["content"].ToString();
+
+                        rString = rString.Replace(">", ">-");
+                        var html = rString;
+
+                        var content = new HtmlDocument();
+                        content.LoadHtml(html);
+                        // بتسبلي الكلام  وبتشيل ال <>
+                        var htmlNodes = content.DocumentNode.InnerText;
+                        // var htmlNodes = content.DocumentNode.InnerText;
+
+
+                        //  Console.WriteLine(htmlNodes);
+                        //  string replacement = Regex.Replace(htmlNodes, @"\t|\n|\r", " ");
+                        htmlNodes = htmlNodes.Replace("\n", "");
+                        htmlNodes = htmlNodes.Replace("\r", "");
+                        htmlNodes = htmlNodes.Replace("\t", "");
+                        htmlNodes = htmlNodes.Replace(" ", "*");
+                        //htmlNodes = htmlNodes.Replace("--", "");
+                        //htmlNodes = htmlNodes.Replace(" ", "-");
+                        //  Console.WriteLine(i);
+
+                        //بيسهل عليا الدنيا علشان اضيف او امسح حاجه
+                        StringBuilder stringBuilder = new StringBuilder();
+                        for (int g = 0; g < htmlNodes.Length; g++)
+                        {
+                            if (g < htmlNodes.Length - 1)//علشان ميضربش اوت اوف رينج 
+                            {
+                                // بمسح ال مسافات ب *
+                                if (htmlNodes[g] == '*' && htmlNodes[g + 1] != '*' && htmlNodes[g + 1] != '-')
+                                {
+                                    stringBuilder.Append(" ");
+                                }
+                                else if (htmlNodes[g] != '*')
+                                {
+                                    stringBuilder.Append(htmlNodes[g]);
+                                }
+
+                            }
+
+
+                        }
+                        htmlNodes = stringBuilder.ToString();
+                        stringBuilder.Clear();
+                        for (int g = 0; g < htmlNodes.Length; g++)
+                        {
+                            if (g < htmlNodes.Length - 1)
+                            {
+                                //<h>-kjhkjdf<h>-
+                                //-lkfkfls-
+                                if (htmlNodes[g] == '-' && htmlNodes[g + 1] != '-')
+                                {
+                                    stringBuilder.Append(",");
+                                }
+                                else if (htmlNodes[g] != '-')
+                                {
+                                    stringBuilder.Append(htmlNodes[g]);
+                                }
+
+                            }
+
+
+                        }
+
+                        htmlNodes = stringBuilder.ToString();
+                        // htmlNodes = htmlNodes.Replace("-", ",");
+
+                        //  Console.WriteLine(htmlNodes);
+
+                        //اكواد جاهزه
+                        string removableChars = Regex.Escape(@"@&'()<>#;?");
+                        string pattern = "[" + removableChars + "]";
+
+
+                        htmlNodes = Regex.Replace(htmlNodes, pattern, "");
+                        htmlNodes = Regex.Replace(htmlNodes, @"[^\u0000-\u007F]+", "");//بيمسح اي حروف مش انجليزي
+
+                        store_new_database(tbl.Rows[i][0].ToString(), htmlNodes);
+
+                        //     SqlConnection.Open();
+                        //     string query1 = "UPDATE   datatable set contentofpage = @htmlNodes  WHERE id = @x";
+                        // //if (SqlConnection.State == System.Data.ConnectionState.Open)
+                        // //{
+                        //// sqlCommand =  new SqlCommand("UPDATE datatable SET contentofpage = @htmlNodes  WHERE id = '" + (i + 1) + "");
+                        //     sqlCommand = new SqlCommand(query1, SqlConnection);
+
+                        //     sqlCommand.Parameters.Add("@htmlNodes", htmlNodes);
+                        // sqlCommand.Parameters.Add("@x", i+1);
+
+                        // sqlCommand.ExecuteNonQuery();
+                        //     SqlConnection.Close();
+                        // Console.WriteLine(i);
+
+
+                        // htmlNodes.Split(',');
+
+                        //                // Console.WriteLine(list.Count);
+
+                        //                Console.WriteLine(i);
+                        //                i++;
+                        //            }
+                        //        }
+                        //    }
+                        //    Console.ReadKey();
+
+                    }
+                }
+            }
+        }
+
+    }
+        
+}

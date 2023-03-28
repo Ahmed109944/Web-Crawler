@@ -1,0 +1,313 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.IO;
+
+//package to use web request and response
+using System.Net;
+//package to use html parser like (mshtml)
+using mshtml;
+//package to make connection with sql server
+using System.Data.SqlClient;
+using NTextCat;
+
+
+namespace IR_Milestone1
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            ToVisit = new Queue<string>();
+            Visited = new Queue<string>();
+            duplicate = new List<string>();
+            duplicate.Add("http://www.bbc.com");
+            ToVisit.Enqueue("http://www.bbc.com");
+
+            string page = fetch();
+            Visited.Enqueue(URL);
+            //  store(URL, page);
+            Console.WriteLine(URL);
+            my_doc = new mshtml.HTMLDocumentClass();
+            my_doc.write(page);
+            //Console.WriteLine("  xx");
+
+            IHTMLElementCollection elements = my_doc.links;
+            //Console.WriteLine("  xx");
+
+            foreach (IHTMLElement el in elements)
+            {
+                string link = (string)el.getAttribute("href", 0);
+                //Console.WriteLine("  xcx");
+                Console.WriteLine(link + " " + Visited.Count);
+
+                if (!duplicate.Contains(link) && ((link.StartsWith("https://") || link.StartsWith("http://")) && CheckEnglish_Lang(link)))
+                {
+
+                    // Console.WriteLine("  aaaa");
+
+                    ToVisit.Enqueue(link);
+                    duplicate.Add(link);
+                    //Console.WriteLine("  link is added in dup");
+
+                    //Console.WriteLine("  link is added in ToVisited");
+
+
+                }
+            }
+            //Console.WriteLine("parse func in closed");
+
+            while (Visited.Count < 3000)
+            {
+
+
+
+
+                URL = ToVisit.Dequeue();
+                webRequest = (HttpWebRequest)HttpWebRequest.Create(URL);
+                try
+                {
+                    WebResponse = (HttpWebResponse)webRequest.GetResponse();
+
+                    Stream response = WebResponse.GetResponseStream();
+                    StreamReader reader = new StreamReader(response);
+                    content = reader.ReadToEnd();
+                    response.Close();
+                    reader.Close();
+                    WebResponse.Close();
+                    if (CheckEnglish_Lang(content))
+                    {
+                        page = content;
+                        Visited.Enqueue(URL);
+                        store(URL, page);
+                        Console.WriteLine(URL);
+                        my_doc = new mshtml.HTMLDocumentClass();
+                        my_doc.write(page);
+                        //Console.WriteLine("  xx");
+
+                        elements = my_doc.links;
+                        //Console.WriteLine("  xx");
+
+                        foreach (IHTMLElement el in elements)
+                        {
+                            string link = (string)el.getAttribute("href", 0);
+                            //Console.WriteLine("  xcx");
+                            Console.WriteLine(link + " " + Visited.Count);
+
+                            if (!duplicate.Contains(link) && ((link.StartsWith("https://") || link.StartsWith("http://")) && CheckEnglish_Lang(link)))
+                            {
+
+                                // Console.WriteLine("  aaaa");
+
+                                ToVisit.Enqueue(link);
+                                duplicate.Add(link);
+                                //Console.WriteLine("  link is added in dup");
+
+                                //Console.WriteLine("  link is added in ToVisited");
+
+
+                            }
+                        }
+                    }
+                    else
+                    {
+                        my_doc = new mshtml.HTMLDocumentClass();
+                        my_doc.write(page);
+                        //Console.WriteLine("  xx");
+
+                        elements = my_doc.links;
+                        //Console.WriteLine("  xx");
+
+                        foreach (IHTMLElement el in elements)
+                        {
+                            string link = (string)el.getAttribute("href", 0);
+                            //Console.WriteLine("  xcx");
+                            Console.WriteLine(link + " " + Visited.Count);
+
+                            if (!duplicate.Contains(link) && ((link.StartsWith("https://") || link.StartsWith("http://")) && CheckEnglish_Lang(link)))
+                            {
+
+                                // Console.WriteLine("  aaaa");
+
+                                ToVisit.Enqueue(link);
+                                duplicate.Add(link);
+                                //Console.WriteLine("  link is added in dup");
+
+                                //Console.WriteLine("  link is added in ToVisited");
+
+
+                            }
+                        }
+
+                    }
+
+
+
+                }
+                catch
+                {
+
+                }
+
+
+
+
+
+
+
+
+                //Console.WriteLine("parse func in closed");
+
+
+
+
+            }
+        }
+        public static HttpWebRequest webRequest;
+        public static HttpWebResponse WebResponse;
+        public static string content;
+        public static string URL;
+        public static mshtml.IHTMLDocument2 my_doc;
+        public static Queue<string> ToVisit;
+        public static Queue<string> Visited;
+        public static List<string> duplicate;
+
+
+        private static void intialize()
+        {
+            //throw new NotImplementedException();
+
+            //Console.WriteLine("intialize is done");
+
+
+        }
+        /*Using System.Net;
+         * MSSQLSERVER
+         * SQLEXPRESS
+            String URL =“http://www.cnn.com”;
+        // Create a new 'WebRequest' object to the mentioned URL.
+            WebRequest myWebRequest = WebRequest.Create(URL);
+        // The response object of 'WebRequest' is assigned to a WebResponse' variable.
+            WebResponse myWebResponse = myWebRequest.GetResponse();
+            Stream streamResponse = myWebResponse.GetResponseStream(); StreamReader sReader = new StreamReader(streamResponse);
+            string rString = SReader.ReadToEnd();
+            streamResponse.Close();
+            sReader.Close();
+            myWebResponse.Close();*/
+
+        private static string fetch()
+        {
+            //throw new NotImplementedException();
+            URL = ToVisit.Dequeue();
+            webRequest = (HttpWebRequest)HttpWebRequest.Create(URL);
+            try
+            {
+                WebResponse = (HttpWebResponse)webRequest.GetResponse();
+                if (WebResponse.StatusCode == HttpStatusCode.OK)
+                {
+                    Stream response = WebResponse.GetResponseStream();
+                    StreamReader reader = new StreamReader(response);
+                    content = reader.ReadToEnd();
+                    response.Close();
+                    reader.Close();
+                    WebResponse.Close();
+                    if (CheckEnglish_Lang(content))
+                    {
+                        return content;
+                    }
+
+                }
+
+            }
+            catch (Exception e)
+            {
+                fetch();
+            }
+            //Console.WriteLine(content);
+            //Console.WriteLine("Fetch is done");
+
+
+            return content;
+        }
+        private static bool CheckEnglish_Lang(string page)
+        {
+            //throw new NotImplementedException();
+            var factory = new RankedLanguageIdentifierFactory();
+            var identifier = factory.Load(@"C:\Users\Ahmed Khaled\source\repos\IR_Milestone1\IR_Milestone1\Core14.profile.xml");
+            var lang = identifier.Identify(content);
+            var mostcommonlang = lang.FirstOrDefault();
+            if (mostcommonlang != null)
+            {
+                if (mostcommonlang.Item1.Iso639_3 == "eng")
+                {
+                    //Console.WriteLine("Check is done");
+                    return true;
+                }
+
+            }
+            //Console.WriteLine("Check is done");
+
+            return false;
+        }
+        private static void store(string url, string page)
+        {
+
+            string ConnectionString = @"Data Source=DESKTOP-C0GR1RQ\MSSQLSERVERR;Initial Catalog=WebCrawler;Integrated Security=True";
+            SqlConnection conn = new SqlConnection(ConnectionString);
+            conn.Open();
+
+
+            string query = "insert into [webpageurl] (URL,content) values(@URL,@page)";
+            //string query = "insert into webpageurl (URL) values(@URL)";
+
+            SqlCommand command = new SqlCommand(query, conn);
+
+            command.Parameters.AddWithValue("@URL", URL);
+            command.Parameters.AddWithValue("@page", page);
+            command.ExecuteNonQuery();
+
+            conn.Close();
+
+            
+
+        }
+        private static void parse(string page)
+        {
+            //throw new NotImplementedException();
+            //Console.WriteLine("parse func in opened");
+            my_doc = new mshtml.HTMLDocumentClass();
+            my_doc.write(page);
+            //Console.WriteLine("  xx");
+
+            IHTMLElementCollection elements = my_doc.links;
+            //Console.WriteLine("  xx");
+
+            foreach (IHTMLElement el in elements)
+            {
+                string link = (string)el.getAttribute("href", 0);
+                //Console.WriteLine("  xcx");
+                Console.WriteLine(link + " " + Visited.Count);
+
+                if (!duplicate.Contains(link) && ((link.StartsWith("https://") || link.StartsWith("http://")) && CheckEnglish_Lang(link)))
+                {
+
+                    // Console.WriteLine("  aaaa");
+
+                    ToVisit.Enqueue(link);
+                    duplicate.Add(link);
+                    //Console.WriteLine("  link is added in dup");
+
+                    //Console.WriteLine("  link is added in ToVisited");
+
+
+                }
+            }
+            //Console.WriteLine("parse func in closed");
+
+
+        }
+
+    }
+}
